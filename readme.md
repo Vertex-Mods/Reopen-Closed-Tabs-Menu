@@ -20,10 +20,10 @@
 1. Install latest version of [Sine](https://github.com/CosmoCreeper/Sine) (if you haven't already).
 2. Restart Zen Browser.
 3. Open settings and go to the `Sine` tab.
-4. Search for Reopen Closed Tabs Menu.
+4. Search for Reopen Closed Tabs Menu (After it is released in Sine).
 5. Click Install.
 6. A toast for restart should appear — click on that to restart Zen.
-7. Enjoy!
+7. A new Toolbar icon will appear, right click in it and click on `Customize Toolbar` to change it's position.
 
 ## 🎨 Customization & Preferences
 
