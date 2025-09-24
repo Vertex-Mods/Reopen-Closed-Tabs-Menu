@@ -37,4 +37,4 @@ The Reopen Closed Tabs Menu can be configured from `about:config`.
 
 ## 📜 License
 
-This is licensed under MIT license. Check [License](../LICENSE) for more details.
+This is licensed under MIT license. Check [License](./LICENSE) for more details.
