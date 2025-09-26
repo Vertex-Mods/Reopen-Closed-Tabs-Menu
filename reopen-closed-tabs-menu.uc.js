@@ -2,7 +2,6 @@
 // @name            Reopen Closed Tabs
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          BibekBhusal
-// @onlyonce
 // ==/UserScript==
 
 
@@ -390,7 +389,6 @@
 
   const ReopenClosedTabs = {
     _boundToggleMenu: null,
-    _panel: null,
     _boundHandleItemClick: null,
     _allTabsCache: [],
     _registeredHotkey: null,
@@ -453,7 +451,6 @@
 
     _registerToolbarButton() {
       const buttonId = "reopen-closed-tabs-button";
-      const panelId = "reopen-closed-tabs-panel";
 
       try {
         UC_API.Utils.createWidget({
@@ -465,8 +462,31 @@
           callback: this.toggleMenu.bind(this),
         });
         debugLog(`Registered toolbar button: ${buttonId}`);
+      } catch (e) {
+        debugError("Failed to register toolbar button:", e);
+      }
+    },
 
-        this._panel = parseElement(
+    async toggleMenu(event) {
+      debugLog("Toggle menu called.");
+      let button;
+      if (event && event.target && event.target.id === "reopen-closed-tabs-button") {
+        button = event.target;
+      } else {
+        // Called from hotkey, find the button in the current window
+        button = document.getElementById("reopen-closed-tabs-button");
+      }
+
+      if (!button) {
+        debugError("Reopen Closed Tabs button not found.");
+        return;
+      }
+
+      const panelId = "reopen-closed-tabs-panel";
+
+      if (!button._reopenClosedTabsPanel) {
+        // Create panel if it doesn't exist for this button
+        const panel = parseElement(
           `
         <panel id="${panelId}" type="arrow">
         </panel>
@@ -476,37 +496,33 @@
 
         const mainPopupSet = document.getElementById("mainPopupSet");
         if (mainPopupSet) {
-          mainPopupSet.appendChild(this._panel);
-          debugLog(`Created panel: ${panelId}`);
+          mainPopupSet.appendChild(panel);
+          button._reopenClosedTabsPanel = panel; // Store panel on the button
+          debugLog(`Created panel: ${panelId} for button: ${button.id}`);
         } else {
           debugError("Could not find #mainPopupSet to append panel.");
+          return;
         }
-      } catch (e) {
-        debugError("Failed to register toolbar button:", e);
+      }
+
+      const panel = button._reopenClosedTabsPanel;
+
+      if (panel.state === "open") {
+        panel.hidePopup();
+      } else {
+        await this._populatePanel(panel); // Pass the panel to populate
+        panel.openPopup(button, "after_start", 0, 0, false, false);
       }
     },
 
-    async toggleMenu() {
-      debugLog("Toggle menu called.");
-      const button = document.getElementById("reopen-closed-tabs-button");
-      if (button && this._panel) {
-        if (this._panel.state === "open") {
-          this._panel.hidePopup();
-        } else {
-          await this._populatePanel();
-          this._panel.openPopup(button, "after_start", 0, 0, false, false);
-        }
-      }
-    },
-
-    async _populatePanel() {
+    async _populatePanel(panel) {
       debugLog("Populating panel.");
-      while (this._panel.firstChild) {
-        this._panel.removeChild(this._panel.firstChild);
+      while (panel.firstChild) {
+        panel.removeChild(panel.firstChild);
       }
 
       const mainVbox = parseElement(`<vbox flex="1"/>`, "xul");
-      this._panel.appendChild(mainVbox);
+      panel.appendChild(mainVbox);
 
       // Search bar
       const searchBox = parseElement(
@@ -557,15 +573,15 @@
         firstItem.setAttribute("selected", "true");
       }
 
-      const searchInput = this._panel.querySelector("#reopen-closed-tabs-search-input");
+      const searchInput = panel.querySelector("#reopen-closed-tabs-search-input");
       if (searchInput) {
-        searchInput.addEventListener("input", (event) => this._filterTabs(event.target.value));
-        searchInput.addEventListener("keydown", (event) => this._handleSearchKeydown(event));
-        this._panel.addEventListener(
+        searchInput.addEventListener("input", (event) => this._filterTabs(event.target.value, panel));
+        searchInput.addEventListener("keydown", (event) => this._handleSearchKeydown(event, panel));
+        panel.addEventListener(
           "popupshown",
           () => {
             searchInput.focus();
-            const listContainer = this._panel.querySelector("#reopen-closed-tabs-list-container");
+            const listContainer = panel.querySelector("#reopen-closed-tabs-list-container");
             if (listContainer) {
               listContainer.scrollTop = 0;
             }
@@ -652,7 +668,7 @@
       }
     },
 
-    _filterTabs(query) {
+    _filterTabs(query, panel) {
       const lowerQuery = query.toLowerCase();
       const filteredTabs = this._allTabsCache.filter((tab) => {
         const title = (tab.title || "").toLowerCase();
@@ -667,7 +683,7 @@
         );
       });
 
-      const tabItemsContainer = this._panel.querySelector("#reopen-closed-tabs-list-container");
+      const tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
       if (tabItemsContainer) {
         while (tabItemsContainer.firstChild) {
           tabItemsContainer.removeChild(tabItemsContainer.firstChild);
@@ -698,9 +714,9 @@
       }
     },
 
-    _handleSearchKeydown(event) {
+    _handleSearchKeydown(event, panel) {
       event.stopPropagation();
-      const tabItemsContainer = this._panel.querySelector("#reopen-closed-tabs-list-container");
+      const tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
       if (!tabItemsContainer) return;
 
       const currentSelected = tabItemsContainer.querySelector(".reopen-closed-tab-item[selected]");
@@ -759,7 +775,12 @@
 
       if (tabItem && tabItem.tabData) {
         TabManager.reopenTab(tabItem.tabData);
-        this._panel.hidePopup();
+        const panel = tabItem.closest("panel");
+        if (panel) {
+          panel.hidePopup();
+        } else {
+          debugError("Could not find parent panel to hide.");
+        }
       } else {
         debugError("Cannot reopen tab: Tab data not found on menu item.", event.target);
       }
