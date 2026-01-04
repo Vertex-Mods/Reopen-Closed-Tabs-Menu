@@ -1,6 +1,6 @@
-# Contributing to Reopen Closed Tab Menu
+# Contributing to Reopen Closed Tabs Menu
 
-Thank you for considering contributing to **Reopen Closed Tab Menu**! We appreciate your help in making this project better.
+Thank you for considering contributing to **Reopen Closed Tabs Menu**! We appreciate your help in making this project better.
 
 > [!NOTE]
 > Pull Requests to this GitHub repository will not be merged. This project is maintained in another repository: [BibekBhusal0/zen-custom-js/reopen-closed-tabs](https://github.com/BibekBhusal0/zen-custom-js/tree/main/reopen-closed-tabs), please open pull requests there.
@@ -37,7 +37,7 @@ Thank you for considering contributing to **Reopen Closed Tab Menu**! We appreci
      ```
 
 6. **Open a Pull Request**
-   - Open a PR against the upstream repository (usually the `main` branch). In the PR description, include what you changed, why. Respond to feedback and update the PR as needed.
+   - Open a PR against the upstream repository (usually the `main` branch). In the PR description, include what you changed and why. Respond to feedback and update the PR as needed.
 
 ## Reporting Issues
 
