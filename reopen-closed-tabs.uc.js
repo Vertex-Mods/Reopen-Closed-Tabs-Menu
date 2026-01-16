@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.1b
-// @lastUpdated     2026-01-15
+// @version         1.1.2b
+// @lastUpdated     2026-01-16
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // ==/UserScript==
