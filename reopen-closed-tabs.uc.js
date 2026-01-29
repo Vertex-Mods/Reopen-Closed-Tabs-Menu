@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.2
-// @lastUpdated     2026-01-16
+// @version         1.1.3
+// @lastUpdated     2026-01-29
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // ==/UserScript==
@@ -146,13 +146,12 @@
    * @param {KeyboardEvent} event - The keyboard event.
    * @returns {string} A unique signature string.
    */
-  function eventToShortcutSignature(event) {
-    const modifiers = [];
-    if (event.ctrlKey || event.metaKey) modifiers.push("ctrl");
-    if (event.altKey) modifiers.push("alt");
-    if (event.shiftKey) modifiers.push("shift");
-    modifiers.push(event.key.toLowerCase());
-    return modifiers.join("+");
+
+  function normalizeKeyName(key) {
+    if (!key) return "";
+    const k = key.toLowerCase();
+    if (k === " " || k === "space" || k === "spacebar") return "space";
+    return k;
   }
 
   /**
@@ -165,38 +164,46 @@
     return shortcutStr
       .toLowerCase()
       .replace(/control/g, "ctrl")
-      .replace(/option/g, "alt");
+      .replace(/option/g, "alt")
+      .split("+")
+      .map((s) => normalizeKeyName(s.trim()))
+      .join("+");
+  }
+
+  let _shortcuts = new Map();
+
+  /**
+   * Registers a new keyboard shortcut.
+   * @param {string} shortcutStr - The shortcut string (e.g., "Ctrl+Shift+K").
+   * @param {string} id - A unique identifier for this shortcut.
+   * @param {Function} callback - The function to execute when the shortcut is triggered.
+   * @returns {boolean} True if registration was successful, false otherwise.
+   */
+  function registerShortcut(shortcutStr, id, callback) {
+    if (!shortcutStr || !id || typeof callback !== "function") {
+      console.error("registerShortcutInRegistry: Invalid arguments", { shortcutStr, id, callback });
+      return false;
+    }
+    unregisterShortcutById(id);
+
+    const signature = shortcutStringToSignature(shortcutStr);
+    _shortcuts.set(signature, { id, callback, shortcutStr });
+    return true;
   }
 
   /**
-   * Registers a single keyboard shortcut using event listeners (simplified version).
-   * @param {string} shortcutStr - The shortcut string (e.g., "Ctrl+Shift+K").
-   * @param {string} id - A unique identifier for this shortcut.
-   * @param {Function} callback - The function to execute when shortcut is triggered.
-   * @param {EventTarget} [target=window] - The event target to attach listeners to.
-   * @returns {{success: boolean, unregister: Function}} An object with success status and unregister function.
+   * Unregisters a shortcut by its ID.
+   * @param {string} id - The ID of the shortcut to unregister.
+   * @returns {boolean} True if unregistration was successful, false otherwise.
    */
-  function registerShortcut(shortcutStr, id, callback, target = window) {
-    if (!shortcutStr || !id || typeof callback !== "function") {
-      console.error("registerShortcut: Invalid arguments", { shortcutStr, id, callback });
-      return { success: false, unregister: () => {} };
-    }
-
-    const signature = shortcutStringToSignature(shortcutStr);
-    const handler = (event) => {
-      if (eventToShortcutSignature(event) === signature) {
-        event.preventDefault();
-        event.stopPropagation();
-        callback(event);
+  function unregisterShortcutById(id) {
+    for (const [signature, shortcut] of _shortcuts.entries()) {
+      if (shortcut.id === id) {
+        _shortcuts.delete(signature);
+        return true;
       }
-    };
-
-    target.addEventListener("keydown", handler, true);
-
-    return {
-      success: true,
-      unregister: () => target.removeEventListener("keydown", handler, true),
-    };
+    }
+    return false;
   }
 
   const parseElement = (elementString, type = "html") => {
@@ -504,7 +511,6 @@
     _boundToggleMenu: null,
     _boundHandleItemClick: null,
     _allTabsCache: [],
-    _unregisterShortcut: null,
 
     /**
      * Initializes the Reopen Closed Tabs mod.
@@ -534,7 +540,6 @@
       );
 
       if (result.success) {
-        this._unregisterShortcut = result.unregister;
         PREFS.debugLog(`Registered shortcut: ${shortcutString}`);
       } else {
         PREFS.debugError("Failed to register keyboard shortcut");
@@ -542,10 +547,6 @@
     },
 
     onHotkeyChange() {
-      if (this._unregisterShortcut) {
-        this._unregisterShortcut();
-        PREFS.debugLog("Unregistered previous shortcut");
-      }
       this._registerKeyboardShortcut();
       PREFS.debugLog("Registered new shortcut");
     },
