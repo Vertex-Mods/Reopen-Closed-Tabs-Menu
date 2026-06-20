@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.3
-// @lastUpdated     2026-01-29
+// @version         1.1.4
+// @lastUpdated     2026-06-21
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // ==/UserScript==
@@ -13,727 +13,543 @@
 // To make changes, please edit the source files in the repository:
 // https://github.com/BibekBhusal0/zen-custom-js
 
-(function (factory) {
-  typeof define === 'function' && define.amd ? define(factory) :
-  factory();
-})((function () { 'use strict';
+(() => {
 
+  // utils/pref.js
   function setPref(key, value) {
     try {
-      const prefService = Services.prefs;
-      if (typeof value === "boolean") {
+      let prefService = Services.prefs;
+      if (typeof value === "boolean")
         prefService.setBoolPref(key, value);
-      } else if (typeof value === "number") {
+      else if (typeof value === "number")
         prefService.setIntPref(key, value);
-      } else {
+      else
         prefService.setStringPref(key, value);
-      }
-    } catch {
-      //ignore
-    }
+    } catch {}
   }
-
-  const getPref = (key, defaultValue) => {
+  var getPref = (key, defaultValue) => {
     try {
-      const prefService = Services.prefs;
-      if (prefService.prefHasUserValue(key)) {
-        switch (prefService.getPrefType(key)) {
-          case prefService.PREF_STRING:
-            return prefService.getStringPref(key);
-          case prefService.PREF_INT:
-            return prefService.getIntPref(key);
-          case prefService.PREF_BOOL:
-            return prefService.getBoolPref(key);
-        }
-      }
+      let prefService = Services.prefs, type = prefService.getPrefType(key);
+      if (type === prefService.PREF_STRING)
+        return prefService.getStringPref(key);
+      else if (type === prefService.PREF_INT)
+        return prefService.getIntPref(key);
+      else if (type === prefService.PREF_BOOL)
+        return prefService.getBoolPref(key);
+      return defaultValue;
     } catch {
       return defaultValue;
     }
-    return defaultValue;
-  };
-
-  const setPrefIfUnset = (key, value) => {
-    if (Services.prefs.getPrefType(key) === 0) {
+  }, setPrefIfUnset = (key, value) => {
+    if (Services.prefs.getPrefType(key) === 0)
       setPref(key, value);
-    }
   };
-
   function addPrefListener(name, callback) {
-    const modified_callback = () => {
+    let modified_callback = () => {
       callback({ value: getPref(name) });
     };
-    Services.prefs.addObserver(name, modified_callback);
-    return { name, callback };
+    return Services.prefs.addObserver(name, modified_callback), { name, callback };
   }
-
-  let PREFS$1 = class PREFS {
+  class PREFS {
     static MOD_NAME = "BasePrefs";
     static DEBUG_MODE = "";
-
     static defaultValues = {};
-
-    static getPref(key, defaultValue = undefined) {
-      const defaultVal = defaultValue !== undefined ? defaultValue : this.defaultValues[key];
+    static getPref(key, defaultValue = void 0) {
+      let defaultVal = defaultValue !== void 0 ? defaultValue : this.defaultValues[key];
       return getPref(key, defaultVal);
     }
-
     static setPref(prefKey, value) {
       setPref(prefKey, value);
     }
-
     static setInitialPrefs() {
-      for (const [key, value] of Object.entries(this.defaultValues)) {
+      for (let [key, value] of Object.entries(this.defaultValues))
         setPrefIfUnset(key, value);
-      }
     }
-
     static get debugMode() {
-      if (!this.DEBUG_MODE) return false;
+      if (!this.DEBUG_MODE)
+        return !1;
       return this.getPref(this.DEBUG_MODE);
     }
-
     static set debugMode(value) {
-      if (!this.DEBUG_MODE) return;
+      if (!this.DEBUG_MODE)
+        return;
       this.setPref(this.DEBUG_MODE, value);
     }
-
     static debugLog(...args) {
-      if (this.debugMode) {
+      if (this.debugMode)
         console.log(`${this.MOD_NAME}:`, ...args);
-      }
     }
-
     static debugError(...args) {
-      if (this.debugMode) {
+      if (this.debugMode)
         console.error(`${this.MOD_NAME}:`, ...args);
-      }
     }
-  };
+  }
 
-  class ReopenClosedTabsPREFS extends PREFS$1 {
+  // reopen-closed-tabs/utils/prefs.js
+  class ReopenClosedTabsPREFS extends PREFS {
     static MOD_NAME = "ReopenClosedTabs";
     static DEBUG_MODE = "extensions.reopen-closed-tabs.debug-mode";
     static SHORTCUT_KEY = "extensions.reopen-closed-tabs.shortcut-key";
     static SHOW_OPEN_TABS = "extensions.reopen-closed-tabs.show-open-tabs";
-
+    static SHOW_SYNC_TABS = "extensions.reopen-closed-tabs.show-sync-tabs";
     static defaultValues = {
-      [ReopenClosedTabsPREFS.DEBUG_MODE]: false,
+      [ReopenClosedTabsPREFS.DEBUG_MODE]: !1,
       [ReopenClosedTabsPREFS.SHORTCUT_KEY]: "Alt+A",
-      [ReopenClosedTabsPREFS.SHOW_OPEN_TABS]: false,
+      [ReopenClosedTabsPREFS.SHOW_OPEN_TABS]: !1,
+      [ReopenClosedTabsPREFS.SHOW_SYNC_TABS]: !0
     };
-
     static get shortcutKey() {
       return this.getPref(this.SHORTCUT_KEY);
     }
-
     static set shortcutKey(value) {
       this.setPref(this.SHORTCUT_KEY, value);
     }
-
     static get showOpenTabs() {
       return this.getPref(this.SHOW_OPEN_TABS);
     }
-
     static set showOpenTabs(value) {
       this.setPref(this.SHOW_OPEN_TABS, value);
     }
+    static get showSyncTabs() {
+      return this.getPref(this.SHOW_SYNC_TABS);
+    }
+    static set showSyncTabs(value) {
+      this.setPref(this.SHOW_SYNC_TABS, value);
+    }
   }
+  var PREFS2 = ReopenClosedTabsPREFS;
 
-  const PREFS = ReopenClosedTabsPREFS;
-
-  /**
-   * Creates a unique signature for a keyboard shortcut.
-   * @param {KeyboardEvent} event - The keyboard event.
-   * @returns {string} A unique signature string.
-   */
-
+  // utils/keyboard.js
   function normalizeKeyName(key) {
-    if (!key) return "";
-    const k = key.toLowerCase();
-    if (k === " " || k === "space" || k === "spacebar") return "space";
+    if (!key)
+      return "";
+    let k = key.toLowerCase();
+    if (k === " " || k === "space" || k === "spacebar")
+      return "space";
     return k;
   }
-
-  /**
-   * Creates a unique signature for a shortcut string.
-   * @param {string} shortcutStr - The shortcut string (e.g., "Ctrl+K").
-   * @returns {string} A unique signature string.
-   */
   function shortcutStringToSignature(shortcutStr) {
-    if (!shortcutStr) return "";
-    return shortcutStr
-      .toLowerCase()
-      .replace(/control/g, "ctrl")
-      .replace(/option/g, "alt")
-      .split("+")
-      .map((s) => normalizeKeyName(s.trim()))
-      .join("+");
+    if (!shortcutStr)
+      return "";
+    return shortcutStr.toLowerCase().replace(/control/g, "ctrl").replace(/option/g, "alt").split("+").map((s) => normalizeKeyName(s.trim())).join("+");
   }
-
-  let _shortcuts = new Map();
-
-  /**
-   * Registers a new keyboard shortcut.
-   * @param {string} shortcutStr - The shortcut string (e.g., "Ctrl+Shift+K").
-   * @param {string} id - A unique identifier for this shortcut.
-   * @param {Function} callback - The function to execute when the shortcut is triggered.
-   * @returns {boolean} True if registration was successful, false otherwise.
-   */
+  var _shortcuts = /* @__PURE__ */ new Map;
   function registerShortcut(shortcutStr, id, callback) {
-    if (!shortcutStr || !id || typeof callback !== "function") {
-      console.error("registerShortcutInRegistry: Invalid arguments", { shortcutStr, id, callback });
-      return false;
-    }
+    if (!shortcutStr || !id || typeof callback !== "function")
+      return console.error("registerShortcutInRegistry: Invalid arguments", { shortcutStr, id, callback }), !1;
     unregisterShortcutById(id);
-
-    const signature = shortcutStringToSignature(shortcutStr);
-    _shortcuts.set(signature, { id, callback, shortcutStr });
-    return true;
+    let signature = shortcutStringToSignature(shortcutStr);
+    return _shortcuts.set(signature, { id, callback, shortcutStr }), !0;
   }
-
-  /**
-   * Unregisters a shortcut by its ID.
-   * @param {string} id - The ID of the shortcut to unregister.
-   * @returns {boolean} True if unregistration was successful, false otherwise.
-   */
   function unregisterShortcutById(id) {
-    for (const [signature, shortcut] of _shortcuts.entries()) {
-      if (shortcut.id === id) {
-        _shortcuts.delete(signature);
-        return true;
-      }
-    }
-    return false;
+    for (let [signature, shortcut] of _shortcuts.entries())
+      if (shortcut.id === id)
+        return _shortcuts.delete(signature), !0;
+    return !1;
   }
 
-  const parseElement = (elementString, type = "html") => {
-    if (type === "xul") {
+  // utils/parse.js
+  var parseElement = (elementString, type = "html") => {
+    if (type === "xul")
       return window.MozXULElement.parseXULToFragment(elementString).firstChild;
-    }
-
     let element = new DOMParser().parseFromString(elementString, "text/html");
-    if (element.body.children.length) element = element.body.firstChild;
-    else element = element.head.firstChild;
+    if (element.body.children.length)
+      element = element.body.firstChild;
+    else
+      element = element.head.firstChild;
     return element;
+  }, escapeXmlAttribute = (str) => {
+    if (typeof str !== "string")
+      return str;
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
   };
 
-  const escapeXmlAttribute = (str) => {
-    if (typeof str !== "string") return str;
-    return str
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
-  };
-
+  // utils/timesAgo.js
   function timeAgo(timestamp) {
-    if (timestamp === Infinity) return "Now";
-    const now = new Date();
-    const then = new Date(timestamp);
-    const seconds = Math.round((now - then) / 1000);
-    const minutes = Math.round(seconds / 60);
-    const hours = Math.round(minutes / 60);
-    const days = Math.round(hours / 24);
-    const weeks = Math.round(days / 7);
-    const months = Math.round(days / 30.44);
-    const years = Math.round(days / 365.25);
-
-    if (seconds < 5) return "Just now";
-    if (seconds < 60) return `${seconds} seconds ago`;
-    if (minutes < 60) return `${minutes} minutes ago`;
-    if (hours < 24) return `${hours} hours ago`;
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days} days ago`;
-    if (weeks === 1) return "1 week ago";
-    if (weeks < 4) return `${weeks} weeks ago`;
-    if (months === 1) return "1 month ago";
-    if (months < 12) return `${months} months ago`;
-    if (years === 1) return "1 year ago";
+    if (timestamp === 1 / 0)
+      return "Now";
+    let now = /* @__PURE__ */ new Date, then = new Date(timestamp), seconds = Math.round((now - then) / 1000), minutes = Math.round(seconds / 60), hours = Math.round(minutes / 60), days = Math.round(hours / 24), weeks = Math.round(days / 7), months = Math.round(days / 30.44), years = Math.round(days / 365.25);
+    if (seconds < 5)
+      return "Just now";
+    if (seconds < 60)
+      return `${seconds} seconds ago`;
+    if (minutes < 60)
+      return `${minutes} minutes ago`;
+    if (hours < 24)
+      return `${hours} hours ago`;
+    if (days === 1)
+      return "Yesterday";
+    if (days < 7)
+      return `${days} days ago`;
+    if (weeks === 1)
+      return "1 week ago";
+    if (weeks < 4)
+      return `${weeks} weeks ago`;
+    if (months === 1)
+      return "1 month ago";
+    if (months < 12)
+      return `${months} months ago`;
+    if (years === 1)
+      return "1 year ago";
     return `${years} years ago`;
   }
 
-  const TabManager = {
-    /**
-     * Fetches a list of recently closed tabs.
-     * @returns {Promise<Array<object>>} A promise resolving to an array of closed tab data.
-     */
+  // reopen-closed-tabs/utils/tab-manager.js
+  var TabManager = {
     async getRecentlyClosedTabs() {
-      PREFS.debugLog("Fetching recently closed tabs.");
+      PREFS2.debugLog("Fetching recently closed tabs.");
       try {
-        if (typeof SessionStore !== "undefined" && SessionStore.getClosedTabData) {
-          const closedTabsData = SessionStore.getClosedTabData(window);
-          const closedTabs = closedTabsData
-            .map((tab, index) => {
-              const url = tab.state.entries[0]?.url;
-              return {
-                url: url,
-                title: tab.title || tab.state.entries[0]?.title,
-                isClosed: true,
-                sessionData: tab,
-                sessionIndex: index,
-                faviconUrl: tab.image,
-                closedAt: tab.closedAt,
-              };
-            })
-            .sort((a, b) => b.closedAt - a.closedAt);
-          PREFS.debugLog("Recently closed tabs fetched:", closedTabs);
-          return closedTabs;
-        } else {
-          PREFS.debugError("SessionStore.getClosedTabData not available.");
-          return [];
-        }
+        if (typeof SessionStore < "u" && SessionStore.getClosedTabData) {
+          let closedTabs = SessionStore.getClosedTabData(window).map((tab, index) => {
+            return {
+              url: tab.state.entries[0]?.url,
+              title: tab.title || tab.state.entries[0]?.title,
+              isClosed: !0,
+              sessionData: tab,
+              sessionIndex: index,
+              faviconUrl: tab.image,
+              closedAt: tab.closedAt
+            };
+          }).sort((a, b) => b.closedAt - a.closedAt);
+          return PREFS2.debugLog("Recently closed tabs fetched:", closedTabs), closedTabs;
+        } else
+          return PREFS2.debugError("SessionStore.getClosedTabData not available."), [];
       } catch (e) {
-        PREFS.debugError("Error fetching recently closed tabs:", e);
-        return [];
+        return PREFS2.debugError("Error fetching recently closed tabs:", e), [];
       }
     },
-
-    /**
-     * Removes a closed tab from the session store.
-     * @param {object} tabData - The data of the closed tab to remove, specifically containing sessionIndex.
-     */
+    async getSyncedTabs() {
+      PREFS2.debugLog("Fetching synced tabs.");
+      try {
+        let { SyncedTabs } = ChromeUtils.importESModule("resource://services-sync/SyncedTabs.sys.mjs");
+        if (!SyncedTabs)
+          return PREFS2.debugError("SyncedTabs module not available."), [];
+        await SyncedTabs.syncTabs();
+        let clients = await SyncedTabs.getTabClients(), syncedTabs = [];
+        for (let client of clients)
+          for (let tab of client.tabs)
+            syncedTabs.push({
+              url: tab.url,
+              title: tab.title,
+              isClosed: !1,
+              isSynced: !0,
+              clientName: client.name,
+              faviconUrl: tab.icon,
+              lastUsed: tab.lastUsed
+            });
+        return syncedTabs.sort((a, b) => b.lastUsed - a.lastUsed), PREFS2.debugLog("Synced tabs fetched:", syncedTabs), syncedTabs;
+      } catch (e) {
+        return PREFS2.debugError("Error fetching synced tabs:", e), [];
+      }
+    },
     removeClosedTab(tabData) {
-      PREFS.debugLog("Removing closed tab from session store:", tabData);
+      PREFS2.debugLog("Removing closed tab from session store:", tabData);
       try {
-        if (typeof SessionStore !== "undefined" && SessionStore.forgetClosedTab) {
-          SessionStore.forgetClosedTab(window, tabData.sessionIndex);
-          PREFS.debugLog("Closed tab removed successfully.");
-        } else {
-          PREFS.debugError("SessionStore.forgetClosedTab not available.");
-        }
+        if (typeof SessionStore < "u" && SessionStore.forgetClosedTab)
+          SessionStore.forgetClosedTab(window, tabData.sessionIndex), PREFS2.debugLog("Closed tab removed successfully.");
+        else
+          PREFS2.debugError("SessionStore.forgetClosedTab not available.");
       } catch (e) {
-        PREFS.debugError("Error removing closed tab:", e);
+        PREFS2.debugError("Error removing closed tab:", e);
       }
     },
-
     _getFolderBreadcrumbs(group) {
-      const path = [];
-      let currentGroup = group;
-      while (currentGroup && currentGroup.isZenFolder) {
-        path.unshift(currentGroup.label);
-        currentGroup = currentGroup.group;
-      }
+      let path = [], currentGroup = group;
+      while (currentGroup && currentGroup.isZenFolder)
+        path.unshift(currentGroup.label), currentGroup = currentGroup.group;
       return path.join(" / ");
     },
-
-    /**
-     * Fetches a list of currently open tabs across all browser windows and workspaces.
-     * @returns {Promise<Array<object>>} A promise resolving to an array of open tab data.
-     */
     async getOpenTabs() {
-      PREFS.debugLog("Fetching open tabs.");
-      const openTabs = [];
+      PREFS2.debugLog("Fetching open tabs.");
+      let openTabs = [];
       try {
-        const workspaceTabs = gZenWorkspaces.allStoredTabs;
-        const essentialTabs = Array.from(document.querySelectorAll('tab[zen-essential="true"]'));
-        const allTabs = [...new Set([...workspaceTabs, ...essentialTabs])];
-
-        for (const tab of allTabs) {
-          if (tab.hasAttribute("zen-empty-tab") || tab.closing) continue;
-          const isEssential = tab.hasAttribute("zen-essential");
-
-          const browser = tab.linkedBrowser;
-          const win = tab.ownerGlobal;
-          const workspaceId = tab.getAttribute("zen-workspace-id");
-          const workspace = workspaceId && win.gZenWorkspaces.getWorkspaceFromId(workspaceId);
-          const folder = tab.group?.isZenFolder ? this._getFolderBreadcrumbs(tab.group) : null;
-
-          const tabInfo = {
+        let workspaceTabs = gZenWorkspaces.allStoredTabs, essentialTabs = Array.from(document.querySelectorAll('tab[zen-essential="true"]')), allTabs = [.../* @__PURE__ */ new Set([...workspaceTabs, ...essentialTabs])];
+        for (let tab of allTabs) {
+          if (tab.hasAttribute("zen-empty-tab") || tab.closing)
+            continue;
+          let isEssential = tab.hasAttribute("zen-essential"), browser = tab.linkedBrowser, workspaceId = tab.getAttribute("zen-workspace-id"), workspace = workspaceId && gZenWorkspaces.getWorkspaceFromId(workspaceId), folder = tab.group?.isZenFolder ? this._getFolderBreadcrumbs(tab.group) : null, tabInfo = {
             id: tab.id,
             url: browser.currentURI.spec,
             title: browser.contentTitle || tab.label,
             isPinned: tab.pinned,
             isEssential,
-            folder: folder,
-            workspace: isEssential ? undefined : workspace?.name,
-            isClosed: false,
+            folder,
+            workspace: isEssential ? void 0 : workspace?.name,
+            isClosed: !1,
             faviconUrl: tab.image,
             tabElement: tab,
             lastAccessed: tab._lastAccessed,
-            isUnloaded: tab.hasAttribute("pending"),
+            isUnloaded: tab.hasAttribute("pending")
           };
-
           openTabs.push(tabInfo);
         }
-
-        openTabs.sort((a, b) => b.lastAccessed - a.lastAccessed);
-
-        PREFS.debugLog("Open tabs fetched:", openTabs);
-        return openTabs;
+        return openTabs.sort((a, b) => b.lastAccessed - a.lastAccessed), PREFS2.debugLog("Open tabs fetched:", openTabs), openTabs;
       } catch (e) {
-        PREFS.debugError("Error fetching open tabs:", e);
-        return [];
+        return PREFS2.debugError("Error fetching open tabs:", e), [];
       }
     },
-
-    /**
-     * Reopens a tab based on its data.
-     * If the tab is already open, it switches to it. Otherwise, it opens a new tab.
-     * @param {object} tabData - The data of the tab to reopen.
-     */
     async reopenTab(tabData) {
-      PREFS.debugLog("Reopening tab:", tabData);
+      PREFS2.debugLog("Reopening tab:", tabData);
       try {
-        // If the tab is already open, switch to it.
         if (!tabData.isClosed && tabData.tabElement) {
-          const tab = tabData.tabElement;
-          const win = tab.ownerGlobal;
-          win.gZenWorkspaces.switchTabIfNeeded(tab);
+          let tab = tabData.tabElement;
+          gZenWorkspaces.switchTabIfNeeded(tab);
           return;
         }
-
-        // If it's a closed tab, manually restore it.
         if (tabData.isClosed && tabData.sessionData) {
-          const tabState = tabData.sessionData.state;
-          const url = tabState.entries[0]?.url;
+          let tabState = tabData.sessionData.state, url = tabState.entries[0]?.url;
           if (!url) {
-            PREFS.debugError("Cannot reopen tab: URL not found in session data.", tabData);
+            PREFS2.debugError("Cannot reopen tab: URL not found in session data.", tabData);
             return;
           }
-
-          const newTab = gBrowser.addTab(url, {
+          let newTab = gBrowser.addTab(url, {
             triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
             userContextId: tabState.userContextId || 0,
-            skipAnimation: true,
+            skipAnimation: !0
           });
-          gBrowser.selectedTab = newTab;
-
-          // Remove the tab from the closed tabs list after successful reopening
-          this.removeClosedTab(tabData);
-
-          const workspaceId = tabState.zenWorkspace;
-          const activeWorkspaceId = gZenWorkspaces.activeWorkspace;
-
-          // Switch workspace if necessary
-          if (workspaceId && workspaceId !== activeWorkspaceId) {
-            await gZenWorkspaces.changeWorkspaceWithID(workspaceId);
-            gZenWorkspaces.moveTabToWorkspace(newTab, workspaceId);
-          }
-
-          // Pin if it was previously pinned
-          if (tabState.pinned) gBrowser.pinTab(newTab);
-
-          // Restore to folder state
-          const groupId = tabData.sessionData.closedInTabGroupId;
+          gBrowser.selectedTab = newTab, this.removeClosedTab(tabData);
+          let workspaceId = tabState.zenWorkspace, activeWorkspaceId = gZenWorkspaces.activeWorkspace;
+          if (workspaceId && workspaceId !== activeWorkspaceId)
+            await gZenWorkspaces.changeWorkspaceWithID(workspaceId), gZenWorkspaces.moveTabToWorkspace(newTab, workspaceId);
+          if (tabState.pinned)
+            gBrowser.pinTab(newTab);
+          let groupId = tabData.sessionData.closedInTabGroupId;
           if (groupId) {
-            const folder = document.getElementById(groupId);
-            if (folder && typeof folder.addTabs === "function") {
+            let folder = document.getElementById(groupId);
+            if (folder && typeof folder.addTabs === "function")
               folder.addTabs([newTab]);
-            }
           }
           gBrowser.selectedTab = newTab;
           return;
         }
-
-        // Fallback for any other case.
         if (tabData.url) {
-          const newTab = gBrowser.addTab(tabData.url, {
-            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+          let newTab = gBrowser.addTab(tabData.url, {
+            triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal()
           });
           gBrowser.selectedTab = newTab;
-        } else {
-          PREFS.debugError("Cannot reopen tab: missing URL or session data.", tabData);
-        }
+        } else
+          PREFS2.debugError("Cannot reopen tab: missing URL or session data.", tabData);
       } catch (e) {
-        PREFS.debugError("Error reopening tab:", e);
+        PREFS2.debugError("Error reopening tab:", e);
       }
-    },
-  };
+    }
+  }, tab_manager_default = TabManager;
 
+  // utils/startup-finish.js
   function startupFinish(callback) {
-    if (document.readyState === "complete") callback();
-    else window.addEventListener("load", callback, { once: true });
+    if (document.readyState === "complete")
+      callback();
+    else
+      window.addEventListener("load", callback, { once: !0 });
   }
 
-  const lazy = {};
-
+  // utils/widget.js
+  var lazy = {};
   function defineModuleGettersWithFallback(target, modules) {
-    for (let [key, spec] of Object.entries(modules)) {
+    for (let [key, spec] of Object.entries(modules))
       Object.defineProperty(target, key, {
-        configurable: true,
-        enumerable: true,
-        get: function () {
+        configurable: !0,
+        enumerable: !0,
+        get: function() {
           try {
             let module = ChromeUtils.importESModule(spec.url);
-            delete target[key];
-            target[key] = module[key];
-            return module[key];
+            return delete target[key], target[key] = module[key], module[key];
           } catch {
             let module = ChromeUtils.importESModule(spec.fallback);
-            delete target[key];
-            target[key] = module[key];
-            return module[key];
+            return delete target[key], target[key] = module[key], module[key];
           }
-        },
+        }
       });
-    }
   }
-
   defineModuleGettersWithFallback(lazy, {
     CustomizableUI: {
       url: "moz-src:///browser/components/customizableui/CustomizableUI.sys.mjs",
-      fallback: "resource:///modules/CustomizableUI.sys.mjs",
-    },
+      fallback: "resource:///modules/CustomizableUI.sys.mjs"
+    }
   });
-
   function addWidget(options) {
     try {
       lazy.CustomizableUI.createWidget({
         id: options.id,
         defaultArea: options.defaultArea || lazy.CustomizableUI.AREA_NAVBAR,
-        removable: true,
+        removable: !0,
         label: options.label,
         tooltiptext: options.tooltiptext || options.label,
-        onCreated: function (node) {
-          if (options.icon) {
+        onCreated: function(node) {
+          if (options.icon)
             node.style.listStyleImage = `url("${options.icon}")`;
-          }
-          if (options.class) {
+          if (options.class)
             node.classList.add(...options.class.split(" "));
-          }
-          if (options.onClick) {
+          if (options.onClick)
             node.addEventListener("command", (e) => {
               options.onClick(e);
             });
-          }
-          if (options.onCreated) {
+          if (options.onCreated)
             options.onCreated(node);
-          }
-        },
+        }
       });
-    } catch {
-      //ignore
-    }
+    } catch {}
   }
 
-  const ReopenClosedTabs = {
+  // reopen-closed-tabs/index.js
+  var ReopenClosedTabs = {
     _boundToggleMenu: null,
     _boundHandleItemClick: null,
     _allTabsCache: [],
-
-    /**
-     * Initializes the Reopen Closed Tabs mod.
-     */
     async init() {
-      PREFS.debugLog("Initializing mod.");
-      PREFS.setInitialPrefs();
-      this._boundToggleMenu = this.toggleMenu.bind(this);
-      this._boundHandleItemClick = this._handleItemClick.bind(this);
-      this._registerKeyboardShortcut();
-      this._registerToolbarButton();
-      addPrefListener(PREFS.SHORTCUT_KEY, this.onHotkeyChange.bind(this));
-      PREFS.debugLog("Mod initialized.");
+      PREFS2.debugLog("Initializing mod."), PREFS2.setInitialPrefs(), this._boundToggleMenu = this.toggleMenu.bind(this), this._boundHandleItemClick = this._handleItemClick.bind(this), this._registerKeyboardShortcut(), this._registerToolbarButton(), addPrefListener(PREFS2.SHORTCUT_KEY, this.onHotkeyChange.bind(this)), PREFS2.debugLog("Mod initialized.");
     },
-
     _registerKeyboardShortcut() {
-      const shortcutString = PREFS.shortcutKey;
+      let shortcutString = PREFS2.shortcutKey;
       if (!shortcutString) {
-        PREFS.debugLog("No shortcut key defined.");
+        PREFS2.debugLog("No shortcut key defined.");
         return;
       }
-
-      const result = registerShortcut(
-        shortcutString,
-        "reopen-closed-tabs-hotkey",
-        this._boundToggleMenu
-      );
-
-      if (result.success) {
-        PREFS.debugLog(`Registered shortcut: ${shortcutString}`);
-      } else {
-        PREFS.debugError("Failed to register keyboard shortcut");
-      }
+      if (registerShortcut(shortcutString, "reopen-closed-tabs-hotkey", this._boundToggleMenu).success)
+        PREFS2.debugLog(`Registered shortcut: ${shortcutString}`);
+      else
+        PREFS2.debugError("Failed to register keyboard shortcut");
     },
-
     onHotkeyChange() {
-      this._registerKeyboardShortcut();
-      PREFS.debugLog("Registered new shortcut");
+      this._registerKeyboardShortcut(), PREFS2.debugLog("Registered new shortcut");
     },
-
     _registerToolbarButton() {
-      const buttonId = "reopen-closed-tabs-button";
-
       try {
         addWidget({
-          id: buttonId,
+          id: "reopen-closed-tabs-button",
           label: "Reopen Closed Tabs",
           tooltiptext: "View and reopen recently closed tabs",
           icon: "chrome://browser/skin/zen-icons/history.svg",
-          onClick: this.toggleMenu.bind(this),
-        });
-        PREFS.debugLog(`Registered toolbar button: ${buttonId}`);
+          onClick: this.toggleMenu.bind(this)
+        }), PREFS2.debugLog("Registered toolbar button: reopen-closed-tabs-button");
       } catch (e) {
-        PREFS.debugError("Failed to register toolbar button:", e);
+        PREFS2.debugError("Failed to register toolbar button:", e);
       }
     },
-
     async toggleMenu(event) {
-      PREFS.debugLog("Toggle menu called.");
+      PREFS2.debugLog("Toggle menu called.");
       let button;
-      if (event && event.target && event.target.id === "reopen-closed-tabs-button") {
+      if (event && event.target && event.target.id === "reopen-closed-tabs-button")
         button = event.target;
-      } else {
-        // Called from hotkey, find the button in the current window
+      else
         button = document.getElementById("reopen-closed-tabs-button");
-      }
-
       if (!button) {
-        PREFS.debugError("Reopen Closed Tabs button not found.");
+        PREFS2.debugError("Reopen Closed Tabs button not found.");
         return;
       }
-
-      const panelId = "reopen-closed-tabs-panel";
-
+      let panelId = "reopen-closed-tabs-panel";
       if (!button._reopenClosedTabsPanel) {
-        // Create panel if it doesn't exist for this button
-        const panel = parseElement(
-          `
+        let panel2 = parseElement(`
         <panel id="${panelId}" type="arrow">
         </panel>
-      `,
-          "xul"
-        );
-
-        const mainPopupSet = document.getElementById("mainPopupSet");
-        if (mainPopupSet) {
-          mainPopupSet.appendChild(panel);
-          button._reopenClosedTabsPanel = panel; // Store panel on the button
-          PREFS.debugLog(`Created panel: ${panelId} for button: ${button.id}`);
-        } else {
-          PREFS.debugError("Could not find #mainPopupSet to append panel.");
+      `, "xul"), mainPopupSet = document.getElementById("mainPopupSet");
+        if (mainPopupSet)
+          mainPopupSet.appendChild(panel2), button._reopenClosedTabsPanel = panel2, PREFS2.debugLog(`Created panel: ${panelId} for button: ${button.id}`);
+        else {
+          PREFS2.debugError("Could not find #mainPopupSet to append panel.");
           return;
         }
       }
-
-      const panel = button._reopenClosedTabsPanel;
-
-      if (panel.state === "open") {
+      let panel = button._reopenClosedTabsPanel;
+      if (panel.state === "open")
         panel.hidePopup();
-      } else {
-        await this._populatePanel(panel); // Pass the panel to populate
-        panel.openPopup(button, "after_start", 0, 0, false, false);
-      }
+      else
+        await this._populatePanel(panel), panel.openPopup(button, "after_start", 0, 0, !1, !1);
     },
-
     async _populatePanel(panel) {
-      PREFS.debugLog("Populating panel.");
-      while (panel.firstChild) {
+      PREFS2.debugLog("Populating panel.");
+      while (panel.firstChild)
         panel.removeChild(panel.firstChild);
-      }
-
-      const mainVbox = parseElement(`<vbox flex="1"/>`, "xul");
+      let mainVbox = parseElement('<vbox flex="1"/>', "xul");
       panel.appendChild(mainVbox);
-
-      // Search bar
-      const searchBox = parseElement(
-        `
+      let searchBox = parseElement(`
       <div id="reopen-closed-tabs-search-container">
         <img src="chrome://global/skin/icons/search-glass.svg" class="search-icon"/>
         <input id="reopen-closed-tabs-search-input" type="search" placeholder="Search tabs..."/>
       </div>
-    `,
-        "html"
-      );
+    `, "html");
       mainVbox.appendChild(searchBox);
-
-      const allItemsContainer = parseElement(
-        `<vbox id="reopen-closed-tabs-list-container" flex="1" />`,
-        "xul"
-      );
+      let allItemsContainer = parseElement('<vbox id="reopen-closed-tabs-list-container" flex="1" />', "xul");
       mainVbox.appendChild(allItemsContainer);
-
-      const closedTabs = await TabManager.getRecentlyClosedTabs();
-      const showOpenTabs = PREFS.showOpenTabs;
-      let openTabs = [];
-
-      if (showOpenTabs) {
-        openTabs = await TabManager.getOpenTabs();
-      }
-
-      if (closedTabs.length > 0) {
+      let showOpenTabs = PREFS2.showOpenTabs, closedTabs = await tab_manager_default.getRecentlyClosedTabs(), openTabs = [];
+      if (showOpenTabs)
+        openTabs = await tab_manager_default.getOpenTabs();
+      if (closedTabs.length > 0)
         this._renderGroup(allItemsContainer, "Recently Closed", closedTabs);
-      }
-
-      if (openTabs.length > 0) {
+      if (openTabs.length > 0)
         this._renderGroup(allItemsContainer, "Open Tabs", openTabs);
-      }
-
       if (closedTabs.length === 0 && openTabs.length === 0) {
-        const noTabsItem = parseElement(
-          `<label class="reopen-closed-tab-item-disabled" value="No tabs to display."/>`,
-          "xul"
-        );
+        let noTabsItem = parseElement('<label class="reopen-closed-tab-item-disabled" value="No tabs to display."/>', "xul");
         allItemsContainer.appendChild(noTabsItem);
       }
-
       this._allTabsCache = [...closedTabs, ...openTabs];
-
-      const firstItem = allItemsContainer.querySelector(".reopen-closed-tab-item");
-      if (firstItem) {
+      let firstItem = allItemsContainer.querySelector(".reopen-closed-tab-item");
+      if (firstItem)
         firstItem.setAttribute("selected", "true");
+      let searchInput = panel.querySelector("#reopen-closed-tabs-search-input");
+      if (searchInput)
+        searchInput.addEventListener("input", (event) => this._filterTabs(event.target.value, panel)), searchInput.addEventListener("keydown", (event) => this._handleSearchKeydown(event, panel)), panel.addEventListener("popupshown", () => {
+          searchInput.focus();
+          let listContainer = panel.querySelector("#reopen-closed-tabs-list-container");
+          if (listContainer)
+            listContainer.scrollTop = 0;
+        }, { once: !0 });
+      if (PREFS2.showSyncTabs)
+        this._loadSyncedTabsAsync(allItemsContainer, panel);
+    },
+    async _loadSyncedTabsAsync(container, panel) {
+      let syncedTabs = await tab_manager_default.getSyncedTabs();
+      if (syncedTabs.length === 0)
+        return;
+      this._renderGroup(container, "Synced Tabs", syncedTabs), this._allTabsCache.push(...syncedTabs);
+      let searchInput = panel.querySelector("#reopen-closed-tabs-search-input");
+      if (searchInput && searchInput.value) {
+        this._filterTabs(searchInput.value, panel);
+        return;
       }
-
-      const searchInput = panel.querySelector("#reopen-closed-tabs-search-input");
-      if (searchInput) {
-        searchInput.addEventListener("input", (event) => this._filterTabs(event.target.value, panel));
-        searchInput.addEventListener("keydown", (event) => this._handleSearchKeydown(event, panel));
-        panel.addEventListener(
-          "popupshown",
-          () => {
-            searchInput.focus();
-            const listContainer = panel.querySelector("#reopen-closed-tabs-list-container");
-            if (listContainer) {
-              listContainer.scrollTop = 0;
-            }
-          },
-          { once: true }
-        );
+      let noTabsItem = container.querySelector(".reopen-closed-tab-item-disabled");
+      if (noTabsItem)
+        noTabsItem.remove();
+      if (!container.querySelector(".reopen-closed-tab-item[selected]")) {
+        let firstItem = container.querySelector(".reopen-closed-tab-item");
+        if (firstItem)
+          firstItem.setAttribute("selected", "true");
       }
     },
-
     _renderGroup(container, groupTitle, tabs) {
-      const groupHeader = parseElement(
-        `
+      let groupHeader = parseElement(`
       <hbox class="reopen-closed-tabs-group-header" align="center">
         <label value="${escapeXmlAttribute(groupTitle)}"/>
       </hbox>
-    `,
-        "xul"
-      );
-      container.appendChild(groupHeader);
-
-      tabs.forEach((tab) => {
+    `, "xul");
+      container.appendChild(groupHeader), tabs.forEach((tab) => {
         this._renderTabItem(container, tab);
       });
     },
-
     _renderTabItem(container, tab) {
-      const label = escapeXmlAttribute(tab.title || tab.url || "Untitled Tab");
-      const url = escapeXmlAttribute(tab.url || "");
-      const faviconSrc = escapeXmlAttribute(tab.faviconUrl || "chrome://branding/content/icon32.png");
-
-      let iconHtml = "";
-      if (tab.isEssential) {
-        iconHtml = `<image class="tab-status-icon" src="chrome://browser/skin/zen-icons/essential-add.svg" />`;
-      } else if (tab.isPinned) {
-        iconHtml = `<image class="tab-status-icon" src="chrome://browser/skin/zen-icons/pin.svg" />`;
-      }
-
+      let label = escapeXmlAttribute(tab.title || tab.url || "Untitled Tab"), url = escapeXmlAttribute(tab.url || ""), faviconSrc = escapeXmlAttribute(tab.faviconUrl || "chrome://branding/content/icon32.png"), iconHtml = "";
+      if (tab.isEssential)
+        iconHtml = '<image class="tab-status-icon" src="chrome://browser/skin/zen-icons/essential-add.svg" />';
+      else if (tab.isPinned)
+        iconHtml = '<image class="tab-status-icon" src="chrome://browser/skin/zen-icons/pin.svg" />';
       let contextParts = [];
       if (tab.isClosed) {
-        if (tab.closedAt) {
+        if (tab.closedAt)
           contextParts = ["Closed " + timeAgo(tab.closedAt)];
-        }
+      } else if (tab.isSynced) {
+        if (tab.lastUsed)
+          contextParts.push(timeAgo(tab.lastUsed));
+        if (tab.clientName)
+          contextParts.push("From " + escapeXmlAttribute(tab.clientName));
       } else {
-        if (tab.lastAccessed) contextParts.push(timeAgo(tab.lastAccessed));
-        if (tab.workspace) contextParts.push(escapeXmlAttribute(tab.workspace));
-        if (tab.folder) contextParts.push(escapeXmlAttribute(tab.folder));
+        if (tab.lastAccessed)
+          contextParts.push(timeAgo(tab.lastAccessed));
+        if (tab.workspace)
+          contextParts.push(escapeXmlAttribute(tab.workspace));
+        if (tab.folder)
+          contextParts.push(escapeXmlAttribute(tab.folder));
       }
-      const contextLabel = contextParts.join(" ● ");
-
-      const tabItem = parseElement(
-        `
+      let contextLabel = contextParts.join(" ● "), tabItem = parseElement(`
       <hbox class="reopen-closed-tab-item" align="center" tooltiptext="${url}">
         <image class="tab-favicon" src="${faviconSrc}" />
         <vbox class="tab-item-labels" flex="1">
@@ -742,183 +558,115 @@
         </vbox>
         <hbox class="tab-item-status-icons" align="center">
           ${iconHtml}
-          ${tab.isClosed ? `<image class="close-button" src="chrome://global/skin/icons/close.svg" tooltiptext="Remove from list" />` : ""}
+          ${tab.isClosed ? '<image class="close-button" src="chrome://global/skin/icons/close.svg" tooltiptext="Remove from list" />' : ""}
         </hbox>
       </hbox>
-    `,
-        "xul"
-      );
-
-      if (tab.isUnloaded) {
+    `, "xul");
+      if (tab.isUnloaded)
         tabItem.classList.add("unloaded-tab");
-      }
-
-      tabItem.tabData = tab;
-      tabItem.addEventListener("click", this._boundHandleItemClick);
-      const closeButton = tabItem.querySelector(".close-button");
-      if (closeButton) {
+      tabItem.tabData = tab, tabItem.addEventListener("click", this._boundHandleItemClick);
+      let closeButton = tabItem.querySelector(".close-button");
+      if (closeButton)
         closeButton.addEventListener("click", (event) => this._handleRemoveTabClick(event, tabItem));
-      }
       container.appendChild(tabItem);
     },
-
     _handleRemoveTabClick(event, tabItem) {
-      event.stopPropagation();
-      if (tabItem && tabItem.tabData && tabItem.tabData.isClosed) {
-        TabManager.removeClosedTab(tabItem.tabData);
-        tabItem.remove();
-        this._allTabsCache = this._allTabsCache.filter((tab) => tab !== tabItem.tabData);
-      } else {
-        PREFS.debugError("Cannot remove tab: Tab data not found or tab is not closed.", tabItem);
-      }
+      if (event.stopPropagation(), tabItem && tabItem.tabData && tabItem.tabData.isClosed)
+        tab_manager_default.removeClosedTab(tabItem.tabData), tabItem.remove(), this._allTabsCache = this._allTabsCache.filter((tab) => tab !== tabItem.tabData);
+      else
+        PREFS2.debugError("Cannot remove tab: Tab data not found or tab is not closed.", tabItem);
     },
-
     _filterTabs(query, panel) {
-      const lowerQuery = query.toLowerCase();
-      const filteredTabs = this._allTabsCache.filter((tab) => {
-        const title = (tab.title || "").toLowerCase();
-        const url = (tab.url || "").toLowerCase();
-        const workspace = (tab.workspace || "").toLowerCase();
-        const folder = (tab.folder || "").toLowerCase();
-        return (
-          title.includes(lowerQuery) ||
-          url.includes(lowerQuery) ||
-          workspace.includes(lowerQuery) ||
-          folder.includes(lowerQuery)
-        );
-      });
-
-      const tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
+      let lowerQuery = query.toLowerCase(), filteredTabs = this._allTabsCache.filter((tab) => {
+        let title = (tab.title || "").toLowerCase(), url = (tab.url || "").toLowerCase(), workspace = (tab.workspace || "").toLowerCase(), folder = (tab.folder || "").toLowerCase(), clientName = (tab.clientName || "").toLowerCase();
+        return title.includes(lowerQuery) || url.includes(lowerQuery) || workspace.includes(lowerQuery) || folder.includes(lowerQuery) || clientName.includes(lowerQuery);
+      }), tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
       if (tabItemsContainer) {
-        while (tabItemsContainer.firstChild) {
+        while (tabItemsContainer.firstChild)
           tabItemsContainer.removeChild(tabItemsContainer.firstChild);
-        }
         if (filteredTabs.length === 0) {
-          const noResultsItem = parseElement(
-            `<label class="reopen-closed-tab-item-disabled" value="No matching tabs."/>`,
-            "xul"
-          );
+          let noResultsItem = parseElement('<label class="reopen-closed-tab-item-disabled" value="No matching tabs."/>', "xul");
           tabItemsContainer.appendChild(noResultsItem);
         } else {
-          // Re-render groups with filtered tabs
-          const closedTabs = filteredTabs.filter((t) => t.isClosed);
-          const openTabs = filteredTabs.filter((t) => !t.isClosed);
-
-          if (closedTabs.length > 0) {
+          let closedTabs = filteredTabs.filter((t) => t.isClosed), openTabs = filteredTabs.filter((t) => !t.isClosed && !t.isSynced), syncedTabs = filteredTabs.filter((t) => t.isSynced);
+          if (closedTabs.length > 0)
             this._renderGroup(tabItemsContainer, "Recently Closed", closedTabs);
-          }
-          if (openTabs.length > 0) {
+          if (openTabs.length > 0)
             this._renderGroup(tabItemsContainer, "Open Tabs", openTabs);
-          }
-
-          const firstItem = tabItemsContainer.querySelector(".reopen-closed-tab-item");
-          if (firstItem) {
+          if (syncedTabs.length > 0)
+            this._renderGroup(tabItemsContainer, "Synced Tabs", syncedTabs);
+          let firstItem = tabItemsContainer.querySelector(".reopen-closed-tab-item");
+          if (firstItem)
             firstItem.setAttribute("selected", "true");
-          }
         }
       }
     },
-
     _handleSearchKeydown(event, panel) {
       event.stopPropagation();
-      const tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
-      if (!tabItemsContainer) return;
-
-      const currentSelected = tabItemsContainer.querySelector(".reopen-closed-tab-item[selected]");
-      const allItems = Array.from(tabItemsContainer.querySelectorAll(".reopen-closed-tab-item"));
-      let nextSelected = null;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        if (currentSelected) {
-          const currentIndex = allItems.indexOf(currentSelected);
+      let tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
+      if (!tabItemsContainer)
+        return;
+      let currentSelected = tabItemsContainer.querySelector(".reopen-closed-tab-item[selected]"), allItems = Array.from(tabItemsContainer.querySelectorAll(".reopen-closed-tab-item")), nextSelected = null;
+      if (event.key === "ArrowDown")
+        if (event.preventDefault(), currentSelected) {
+          let currentIndex = allItems.indexOf(currentSelected);
           nextSelected = allItems[currentIndex + 1] || allItems[0];
-        } else {
+        } else
           nextSelected = allItems[0];
-        }
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        if (currentSelected) {
-          const currentIndex = allItems.indexOf(currentSelected);
+      else if (event.key === "ArrowUp")
+        if (event.preventDefault(), currentSelected) {
+          let currentIndex = allItems.indexOf(currentSelected);
           nextSelected = allItems[currentIndex - 1] || allItems[allItems.length - 1];
-        } else {
+        } else
           nextSelected = allItems[allItems.length - 1];
-        }
-      } else if (event.key === "Enter") {
-        event.preventDefault();
-        if (currentSelected) {
+      else if (event.key === "Enter") {
+        if (event.preventDefault(), currentSelected)
           currentSelected.click();
-        }
       }
-
-      if (currentSelected) {
+      if (currentSelected)
         currentSelected.removeAttribute("selected");
-      }
       if (nextSelected) {
-        nextSelected.setAttribute("selected", "true");
-        nextSelected.scrollIntoView({ block: "nearest" });
-
-        // Adjust scroll position to prevent selected item from being hidden behind sticky group label
-        const stickyHeader = tabItemsContainer.querySelector(".reopen-closed-tabs-group-header");
+        nextSelected.setAttribute("selected", "true"), nextSelected.scrollIntoView({ block: "nearest" });
+        let stickyHeader = tabItemsContainer.querySelector(".reopen-closed-tabs-group-header");
         if (stickyHeader) {
-          const stickyHeaderHeight = stickyHeader.offsetHeight;
-          const selectedItemRect = nextSelected.getBoundingClientRect();
-          const containerRect = tabItemsContainer.getBoundingClientRect();
-          if (selectedItemRect.top < containerRect.top + stickyHeaderHeight) {
-            tabItemsContainer.scrollTop -=
-              containerRect.top + stickyHeaderHeight - selectedItemRect.top;
-          }
+          let stickyHeaderHeight = stickyHeader.offsetHeight, selectedItemRect = nextSelected.getBoundingClientRect(), containerRect = tabItemsContainer.getBoundingClientRect();
+          if (selectedItemRect.top < containerRect.top + stickyHeaderHeight)
+            tabItemsContainer.scrollTop -= containerRect.top + stickyHeaderHeight - selectedItemRect.top;
         }
       }
     },
-
     _handleItemClick(event) {
       let tabItem = event.target;
-      while (tabItem && !tabItem.classList.contains("reopen-closed-tab-item")) {
+      while (tabItem && !tabItem.classList.contains("reopen-closed-tab-item"))
         tabItem = tabItem.parentElement;
-      }
-
       if (tabItem && tabItem.tabData) {
-        TabManager.reopenTab(tabItem.tabData);
-        const panel = tabItem.closest("panel");
-        if (panel) {
+        tab_manager_default.reopenTab(tabItem.tabData);
+        let panel = tabItem.closest("panel");
+        if (panel)
           panel.hidePopup();
-        } else {
-          PREFS.debugError("Could not find parent panel to hide.");
-        }
-      } else {
-        PREFS.debugError("Cannot reopen tab: Tab data not found on menu item.", event.target);
-      }
-    },
+        else
+          PREFS2.debugError("Could not find parent panel to hide.");
+      } else
+        PREFS2.debugError("Cannot reopen tab: Tab data not found on menu item.", event.target);
+    }
   };
-
   function setupCommandPaletteIntegration(retryCount = 0) {
-    if (window.ZenCommandPalette) {
-      PREFS.debugLog("Integrating with Zen Command Palette...");
-      window.ZenCommandPalette.addCommands([
+    if (window.ZenCommandPalette)
+      PREFS2.debugLog("Integrating with Zen Command Palette..."), window.ZenCommandPalette.addCommands([
         {
           key: "reopen:closed-tabs-menu",
           label: "Open Reopen closed tab menu",
           command: () => ReopenClosedTabs.toggleMenu(),
           icon: "chrome://browser/skin/zen-icons/history.svg",
-          tags: ["reopen", "tabs", "closed"],
-        },
-      ]);
-
-      PREFS.debugLog("Zen Command Palette integration successful.");
-    } else {
-      PREFS.debugLog("Zen Command Palette not found, retrying in 1000ms");
-      if (retryCount < 10) {
-        setTimeout(() => setupCommandPaletteIntegration(retryCount + 1), 1000);
-      } else {
-        PREFS.debugError("Could not integrate with Zen Command Palette after 10 retries.");
-      }
-    }
+          tags: ["reopen", "tabs", "closed"]
+        }
+      ]), PREFS2.debugLog("Zen Command Palette integration successful.");
+    else if (PREFS2.debugLog("Zen Command Palette not found, retrying in 1000ms"), retryCount < 10)
+      setTimeout(() => setupCommandPaletteIntegration(retryCount + 1), 1000);
+    else
+      PREFS2.debugError("Could not integrate with Zen Command Palette after 10 retries.");
   }
-
   startupFinish(() => {
-    ReopenClosedTabs.init();
-    setupCommandPaletteIntegration();
+    ReopenClosedTabs.init(), setupCommandPaletteIntegration();
   });
-
-}));
+})();
