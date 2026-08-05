@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.4
-// @lastUpdated     2026-06-21
+// @version         1.1.5
+// @lastUpdated     2026-08-05
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // ==/UserScript==
@@ -120,6 +120,16 @@
   var PREFS2 = ReopenClosedTabsPREFS;
 
   // utils/keyboard.js
+  function eventToShortcutSignature(event) {
+    let modifiers = [];
+    if (event.ctrlKey || event.metaKey)
+      modifiers.push("ctrl");
+    if (event.altKey)
+      modifiers.push("alt");
+    if (event.shiftKey)
+      modifiers.push("shift");
+    return modifiers.push(normalizeKeyName(event.key)), modifiers.join("+");
+  }
   function normalizeKeyName(key) {
     if (!key)
       return "";
@@ -134,6 +144,17 @@
     return shortcutStr.toLowerCase().replace(/control/g, "ctrl").replace(/option/g, "alt").split("+").map((s) => normalizeKeyName(s.trim())).join("+");
   }
   var _shortcuts = /* @__PURE__ */ new Map;
+  function handleKeyDown(event) {
+    let t = event.target;
+    if (t && (t.tagName === "input" || t.tagName === "textarea" || t.isContentEditable))
+      return;
+    let signature = eventToShortcutSignature(event), shortcut = _shortcuts.get(signature);
+    if (shortcut)
+      event.preventDefault(), event.stopPropagation(), shortcut.callback(event);
+  }
+  function initShortcutRegistry() {
+    window.addEventListener("keydown", handleKeyDown, !0);
+  }
   function registerShortcut(shortcutStr, id, callback) {
     if (!shortcutStr || !id || typeof callback !== "function")
       return console.error("registerShortcutInRegistry: Invalid arguments", { shortcutStr, id, callback }), !1;
@@ -391,6 +412,14 @@
     } catch {}
   }
 
+  // utils/command-palete.js
+  function addCommands(commands, retryCount = 0) {
+    if (window.ZenCommandPalette)
+      window.ZenCommandPalette.addCommands(commands);
+    else if (retryCount < 10)
+      setTimeout(() => addCommands(commands, retryCount + 1), 1000);
+  }
+
   // reopen-closed-tabs/index.js
   var ReopenClosedTabs = {
     _boundToggleMenu: null,
@@ -405,10 +434,11 @@
         PREFS2.debugLog("No shortcut key defined.");
         return;
       }
-      if (registerShortcut(shortcutString, "reopen-closed-tabs-hotkey", this._boundToggleMenu).success)
+      if (registerShortcut(shortcutString, "reopen-closed-tabs-hotkey", this._boundToggleMenu))
         PREFS2.debugLog(`Registered shortcut: ${shortcutString}`);
       else
         PREFS2.debugError("Failed to register keyboard shortcut");
+      initShortcutRegistry();
     },
     onHotkeyChange() {
       this._registerKeyboardShortcut(), PREFS2.debugLog("Registered new shortcut");
@@ -650,21 +680,16 @@
         PREFS2.debugError("Cannot reopen tab: Tab data not found on menu item.", event.target);
     }
   };
-  function setupCommandPaletteIntegration(retryCount = 0) {
-    if (window.ZenCommandPalette)
-      PREFS2.debugLog("Integrating with Zen Command Palette..."), window.ZenCommandPalette.addCommands([
-        {
-          key: "reopen:closed-tabs-menu",
-          label: "Open Reopen closed tab menu",
-          command: () => ReopenClosedTabs.toggleMenu(),
-          icon: "chrome://browser/skin/zen-icons/history.svg",
-          tags: ["reopen", "tabs", "closed"]
-        }
-      ]), PREFS2.debugLog("Zen Command Palette integration successful.");
-    else if (PREFS2.debugLog("Zen Command Palette not found, retrying in 1000ms"), retryCount < 10)
-      setTimeout(() => setupCommandPaletteIntegration(retryCount + 1), 1000);
-    else
-      PREFS2.debugError("Could not integrate with Zen Command Palette after 10 retries.");
+  function setupCommandPaletteIntegration() {
+    addCommands([
+      {
+        key: "reopen:closed-tabs-menu",
+        label: "Open Reopen closed tab menu",
+        command: () => ReopenClosedTabs.toggleMenu(),
+        icon: "chrome://browser/skin/zen-icons/history.svg",
+        tags: ["reopen", "tabs", "closed"]
+      }
+    ]);
   }
   startupFinish(() => {
     ReopenClosedTabs.init(), setupCommandPaletteIntegration();
