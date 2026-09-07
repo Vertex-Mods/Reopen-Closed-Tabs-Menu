@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.6
-// @lastUpdated     2026-08-07
+// @version         1.1.7
+// @lastUpdated     2026-09-07
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // @onlyonce
@@ -480,12 +480,12 @@
       }
       let panelId = "reopen-closed-tabs-panel";
       if (!button._reopenClosedTabsPanel) {
-        let panel2 = parseElement(`
+        let panel = parseElement(`
         <panel id="${panelId}" type="arrow">
         </panel>
       `, "xul"), mainPopupSet = doc.getElementById("mainPopupSet");
         if (mainPopupSet)
-          mainPopupSet.appendChild(panel2), button._reopenClosedTabsPanel = panel2, PREFS2.debugLog(`Created panel: ${panelId} for button: ${button.id}`);
+          mainPopupSet.appendChild(panel), button._reopenClosedTabsPanel = panel, PREFS2.debugLog(`Created panel: ${panelId} for button: ${button.id}`);
         else {
           PREFS2.debugError("Could not find #mainPopupSet to append panel.");
           return;
