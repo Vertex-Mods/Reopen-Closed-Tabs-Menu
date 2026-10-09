@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.7
-// @lastUpdated     2026-09-07
+// @version         1.1.8
+// @lastUpdated     2026-10-09
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // @onlyonce
@@ -49,7 +49,7 @@
     let modified_callback = () => {
       callback({ value: getPref(name) });
     };
-    return Services.prefs.addObserver(name, modified_callback), { name, callback };
+    return Services.prefs.addObserver(name, modified_callback), { name, observer: modified_callback, callback };
   }
   class PREFS {
     static MOD_NAME = "BasePrefs";
@@ -142,12 +142,12 @@
   function shortcutStringToSignature(shortcutStr) {
     if (!shortcutStr)
       return "";
-    return shortcutStr.toLowerCase().replace(/control/g, "ctrl").replace(/option/g, "alt").split("+").map((s) => normalizeKeyName(s.trim())).join("+");
+    let parts = shortcutStr.toLowerCase().replace(/control/g, "ctrl").replace(/option/g, "alt").split("+").map((s) => normalizeKeyName(s.trim())), rank = (p) => p === "ctrl" ? 0 : p === "alt" ? 1 : p === "shift" ? 2 : p === "meta" ? 3 : 99, mods = parts.filter((p) => rank(p) !== 99).sort((a, b) => rank(a) - rank(b)), keys = parts.filter((p) => rank(p) === 99);
+    return [...mods, ...keys].join("+");
   }
   var _shortcuts = /* @__PURE__ */ new Map;
   function handleKeyDown(event) {
-    let t = event.target;
-    if (t && (t.tagName === "input" || t.tagName === "textarea" || t.isContentEditable))
+    if (event.target?.closest?.(".zenux-shortcut-input, .zenCKSOption-input"))
       return;
     let signature = eventToShortcutSignature(event), shortcut = _shortcuts.get(signature);
     if (shortcut)
@@ -424,6 +424,65 @@
       setTimeout(() => addCommands(commands, retryCount + 1), 1000);
   }
 
+  // utils/fuzzy.js
+  function calculateFuzzyScore(target, query) {
+    if (!target || !query)
+      return 0;
+    let targetLower = target.toLowerCase(), queryLower = query.toLowerCase(), targetLen = target.length, queryLen = query.length;
+    if (queryLen > targetLen)
+      return 0;
+    if (queryLen === 0)
+      return 0;
+    if (targetLower === queryLower)
+      return 200;
+    if (targetLower.startsWith(queryLower))
+      return 100 + queryLen;
+    if (targetLower.split(/[\s-_]+/).map((word) => word[0]).join("") === queryLower)
+      return 90 + queryLen;
+    let score = 0, queryIndex = 0, lastMatchIndex = -1, consecutiveMatches = 0;
+    for (let targetIndex = 0;targetIndex < targetLen; targetIndex++)
+      if (queryIndex < queryLen && targetLower[targetIndex] === queryLower[queryIndex]) {
+        let bonus = 10;
+        if (targetIndex === 0 || [" ", "-", "_"].includes(targetLower[targetIndex - 1]))
+          bonus += 15;
+        if (lastMatchIndex === targetIndex - 1)
+          consecutiveMatches++, bonus += 20 * consecutiveMatches;
+        else
+          consecutiveMatches = 0;
+        if (lastMatchIndex !== -1) {
+          let distance = targetIndex - lastMatchIndex;
+          bonus -= Math.min(distance - 1, 10);
+        }
+        score += bonus, lastMatchIndex = targetIndex, queryIndex++;
+      }
+    return queryIndex === queryLen ? score : 0;
+  }
+  function bestFuzzyScore(targets, query) {
+    let cleanQuery = (query || "").trim();
+    if (!cleanQuery)
+      return 1;
+    let best = 0;
+    for (let target of targets || []) {
+      if (!target)
+        continue;
+      let score = calculateFuzzyScore(target, cleanQuery);
+      if (score > best)
+        best = score;
+      if (best >= 200)
+        break;
+    }
+    return best;
+  }
+  function fuzzyFilterSort(items, query, getTexts) {
+    let cleanQuery = (query || "").trim();
+    if (!cleanQuery)
+      return [...items];
+    return items.map((item) => {
+      let texts = getTexts(item), list = Array.isArray(texts) ? texts : [texts];
+      return { item, score: bestFuzzyScore(list, cleanQuery) };
+    }).filter((entry) => entry.score > 0).sort((a, b) => b.score - a.score).map((entry) => entry.item);
+  }
+
   // reopen-closed-tabs/index.js
   var ReopenClosedTabs = {
     _boundToggleMenu: null,
@@ -506,7 +565,7 @@
       let searchBox = parseElement(`
       <div id="reopen-closed-tabs-search-container">
         <img src="chrome://global/skin/icons/search-glass.svg" class="search-icon"/>
-        <input id="reopen-closed-tabs-search-input" type="search" placeholder="Search tabs..."/>
+        <input id="reopen-closed-tabs-search-input" class="zenux-input" type="search" placeholder="Search tabs..."/>
       </div>
     `, "html");
       mainVbox.appendChild(searchBox);
@@ -520,7 +579,7 @@
       if (openTabs.length > 0)
         this._renderGroup(allItemsContainer, "Open Tabs", openTabs);
       if (closedTabs.length === 0 && openTabs.length === 0) {
-        let noTabsItem = parseElement('<label class="reopen-closed-tab-item-disabled" value="No tabs to display."/>', "xul");
+        let noTabsItem = parseElement('<label class="reopen-closed-tab-item-disabled zenux-empty" value="No tabs to display."/>', "xul");
         allItemsContainer.appendChild(noTabsItem);
       }
       this._allTabsCache = [...closedTabs, ...openTabs];
@@ -561,6 +620,7 @@
       let groupHeader = parseElement(`
       <hbox class="reopen-closed-tabs-group-header" align="center">
         <label value="${escapeXmlAttribute(groupTitle)}"/>
+        <label class="group-count zenux-count" value="${tabs.length}"/>
       </hbox>
     `, "xul");
       container.appendChild(groupHeader), tabs.forEach((tab) => {
@@ -618,10 +678,13 @@
         PREFS2.debugError("Cannot remove tab: Tab data not found or tab is not closed.", tabItem);
     },
     _filterTabs(query, panel) {
-      let lowerQuery = query.toLowerCase(), filteredTabs = this._allTabsCache.filter((tab) => {
-        let title = (tab.title || "").toLowerCase(), url = (tab.url || "").toLowerCase(), workspace = (tab.workspace || "").toLowerCase(), folder = (tab.folder || "").toLowerCase(), clientName = (tab.clientName || "").toLowerCase();
-        return title.includes(lowerQuery) || url.includes(lowerQuery) || workspace.includes(lowerQuery) || folder.includes(lowerQuery) || clientName.includes(lowerQuery);
-      }), tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
+      let filteredTabs = fuzzyFilterSort(this._allTabsCache, query, (tab) => [
+        tab.title || "",
+        tab.url || "",
+        tab.workspace || "",
+        tab.folder || "",
+        tab.clientName || ""
+      ]), tabItemsContainer = panel.querySelector("#reopen-closed-tabs-list-container");
       if (tabItemsContainer) {
         while (tabItemsContainer.firstChild)
           tabItemsContainer.removeChild(tabItemsContainer.firstChild);
@@ -640,6 +703,28 @@
           if (firstItem)
             firstItem.setAttribute("selected", "true");
         }
+      }
+    },
+    _getSectionItems(tabItemsContainer) {
+      let sections = [], currentSection = null;
+      for (let child of tabItemsContainer.children)
+        if (child.classList.contains("reopen-closed-tabs-group-header"))
+          currentSection = { header: child, items: [] }, sections.push(currentSection);
+        else if (currentSection && child.classList.contains("reopen-closed-tab-item"))
+          currentSection.items.push(child);
+      return sections.filter((section) => section.items.length > 0);
+    },
+    _selectTabItem(tabItemsContainer, currentSelected, nextSelected) {
+      if (!nextSelected)
+        return;
+      if (currentSelected)
+        currentSelected.removeAttribute("selected");
+      nextSelected.setAttribute("selected", "true"), nextSelected.scrollIntoView({ block: "nearest" });
+      let stickyHeader = tabItemsContainer.querySelector(".reopen-closed-tabs-group-header");
+      if (stickyHeader) {
+        let stickyHeaderHeight = stickyHeader.offsetHeight, selectedItemRect = nextSelected.getBoundingClientRect(), containerRect = tabItemsContainer.getBoundingClientRect();
+        if (selectedItemRect.top < containerRect.top + stickyHeaderHeight)
+          tabItemsContainer.scrollTop -= containerRect.top + stickyHeaderHeight - selectedItemRect.top;
       }
     },
     _handleSearchKeydown(event, panel) {
@@ -663,18 +748,18 @@
       else if (event.key === "Enter") {
         if (event.preventDefault(), currentSelected)
           currentSelected.click();
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        let sections = this._getSectionItems(tabItemsContainer);
+        if (sections.length <= 1)
+          return;
+        let forward = !event.shiftKey, currentSectionIndex = sections.findIndex((section) => currentSelected ? section.items.includes(currentSelected) : !1);
+        if (currentSectionIndex === -1)
+          nextSelected = forward ? sections[0].items[0] : sections[sections.length - 1].items[0];
+        else
+          nextSelected = sections[(currentSectionIndex + (forward ? 1 : -1) + sections.length) % sections.length].items[0];
       }
-      if (currentSelected)
-        currentSelected.removeAttribute("selected");
-      if (nextSelected) {
-        nextSelected.setAttribute("selected", "true"), nextSelected.scrollIntoView({ block: "nearest" });
-        let stickyHeader = tabItemsContainer.querySelector(".reopen-closed-tabs-group-header");
-        if (stickyHeader) {
-          let stickyHeaderHeight = stickyHeader.offsetHeight, selectedItemRect = nextSelected.getBoundingClientRect(), containerRect = tabItemsContainer.getBoundingClientRect();
-          if (selectedItemRect.top < containerRect.top + stickyHeaderHeight)
-            tabItemsContainer.scrollTop -= containerRect.top + stickyHeaderHeight - selectedItemRect.top;
-        }
-      }
+      this._selectTabItem(tabItemsContainer, currentSelected, nextSelected);
     },
     _handleItemClick(event) {
       let tabItem = event.target;
