@@ -2,8 +2,8 @@
 // @name            Reopen Closed Tabs Menu
 // @description     A popup menu to view and restore recently closed tabs. Includes a toolbar button and keyboard shortcut.
 // @author          Bibek Bhusal
-// @version         1.1.8
-// @lastUpdated     2026-10-09
+// @version         1.1.9
+// @lastUpdated     2026-11-01
 // @ignorecache
 // @homepage        https://github.com/Vertex-Mods/Reopen-Closed-Tabs-Menu
 // @onlyonce
@@ -222,7 +222,7 @@
       PREFS2.debugLog("Fetching recently closed tabs.");
       try {
         if (typeof SessionStore < "u" && SessionStore.getClosedTabData) {
-          let closedTabsData = SessionStore.getClosedTabData(window), closedTabs = [];
+          let closedTabsData = SessionStore.getClosedTabData({ sourceWindow: window }), closedTabs = [];
           return closedTabsData.forEach((tab, index) => {
             let url = tab.state.entries[0]?.url;
             if (closedTabs.some((t) => t.url === url))
@@ -233,6 +233,7 @@
               isClosed: !0,
               sessionData: tab,
               sessionIndex: index,
+              closedId: tab.closedId,
               faviconUrl: tab.image,
               closedAt: tab.closedAt
             });
@@ -270,7 +271,13 @@
     removeClosedTab(tabData) {
       PREFS2.debugLog("Removing closed tab from session store:", tabData);
       try {
-        if (typeof SessionStore < "u" && SessionStore.forgetClosedTab)
+        if (typeof SessionStore > "u") {
+          PREFS2.debugError("SessionStore not available.");
+          return;
+        }
+        if (tabData.closedId != null && SessionStore.forgetClosedTabById)
+          SessionStore.forgetClosedTabById(tabData.closedId), PREFS2.debugLog("Closed tab removed successfully.");
+        else if (SessionStore.forgetClosedTab)
           SessionStore.forgetClosedTab(window, tabData.sessionIndex), PREFS2.debugLog("Closed tab removed successfully.");
         else
           PREFS2.debugError("SessionStore.forgetClosedTab not available.");
